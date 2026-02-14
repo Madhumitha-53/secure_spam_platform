@@ -1,14 +1,13 @@
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
-import { Shield, MessageSquareWarning, Eye, Activity, ArrowLeft, Brain, Fingerprint, Users } from "lucide-react";
+import { Shield, MessageSquareWarning, Eye, Activity, ArrowLeft, Brain, Fingerprint, Users, AlertTriangle, CheckCircle, XCircle, Keyboard, Mouse, Clock, Smartphone } from "lucide-react";
 import SecureCircleVisual from "@/components/SecureCircleVisual";
 import LanguageSelector from "@/components/LanguageSelector";
 import { useLanguage } from "@/i18n/LanguageContext";
 import TrustScoreRing from "@/components/TrustScoreRing";
 import useBehavioralBiometrics from "@/hooks/useBehavioralBiometrics";
-import { useEffect } from "react";
-import { Keyboard, Mouse, Clock, Smartphone } from "lucide-react";
+import { analyzeScamMessage, type ScamResult } from "@/lib/scamAnalyzer";
 
 type Tab = "scam" | "deepfake" | "biometrics" | "securecircle";
 
@@ -76,6 +75,8 @@ const Dashboard = () => {
 const ScamTab = () => {
   const { t } = useLanguage();
   const [inputText, setInputText] = useState("");
+  const [result, setResult] = useState<ScamResult | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   
   const sampleMessages = [
     "Dear customer, your IOB account will be blocked in 24 hours. Share OTP to verify: 8XXX-XXXX",
@@ -84,31 +85,159 @@ const ScamTab = () => {
     "Hi, your IOB fixed deposit maturity is due on 15th March. Visit nearest branch.",
   ];
 
+  const handleAnalyze = () => {
+    if (!inputText.trim()) return;
+    setIsAnalyzing(true);
+    setResult(null);
+    setTimeout(() => {
+      setResult(analyzeScamMessage(inputText));
+      setIsAnalyzing(false);
+    }, 1200);
+  };
+
+  const getRiskColor = (level: string) => {
+    switch (level) {
+      case "critical": return "hsl(var(--trust-low))";
+      case "high": return "hsl(var(--destructive))";
+      case "medium": return "hsl(var(--trust-medium))";
+      case "low": return "hsl(var(--primary))";
+      default: return "hsl(var(--trust-high))";
+    }
+  };
+
+  const getRiskLabel = (level: string) => {
+    return (t as any)[level] || level;
+  };
+
+  const getIndicatorLabel = (key: string) => {
+    return (t as any)[key] || key;
+  };
+
   return (
     <div className="space-y-6">
       <div className="glass rounded-xl p-4">
-        <textarea value={inputText} onChange={(e) => setInputText(e.target.value)}
+        <textarea value={inputText} onChange={(e) => { setInputText(e.target.value); setResult(null); }}
           placeholder={t.pasteSms}
           className="w-full bg-transparent text-foreground placeholder:text-muted-foreground/50 resize-none h-32 outline-none text-sm" />
         <div className="flex justify-between items-center mt-3">
           <span className="text-xs text-muted-foreground">{inputText.length} {t.characters}</span>
-          <button disabled={!inputText.trim()}
-            className="gradient-primary text-primary-foreground px-6 py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
-            {t.analyze}
+          <button onClick={handleAnalyze} disabled={!inputText.trim() || isAnalyzing}
+            className="gradient-primary text-primary-foreground px-6 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition-all">
+            {isAnalyzing ? t.analyzing : t.analyze}
           </button>
         </div>
       </div>
-      <div>
-        <p className="text-xs text-muted-foreground mb-3 uppercase tracking-widest">{t.trySampleMessages}</p>
-        <div className="space-y-2">
-          {sampleMessages.map((msg, i) => (
-            <button key={i} onClick={() => setInputText(msg)}
-              className="w-full text-left glass rounded-lg p-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              {msg}
-            </button>
-          ))}
+
+      <AnimatePresence>
+        {isAnalyzing && (
+          <motion.div className="glass rounded-xl p-8 flex flex-col items-center"
+            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            <div className="w-12 h-12 rounded-full gradient-primary flex items-center justify-center animate-pulse mb-3">
+              <Shield className="w-6 h-6 text-primary-foreground" />
+            </div>
+            <p className="text-sm text-muted-foreground">{t.analyzing}</p>
+          </motion.div>
+        )}
+
+        {result && !isAnalyzing && (
+          <motion.div className="space-y-4" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            {/* Probability & Risk Level */}
+            <div className="glass rounded-xl p-6">
+              <p className="text-xs uppercase tracking-widest text-muted-foreground mb-4">{t.resultTitle}</p>
+              <div className="flex items-center gap-6">
+                <div className="relative">
+                  <svg width="120" height="120" viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="hsl(var(--border))" strokeWidth="6" />
+                    <motion.circle cx="60" cy="60" r="50" fill="none" stroke={getRiskColor(result.riskLevel)} strokeWidth="6"
+                      strokeLinecap="round" strokeDasharray={2 * Math.PI * 50}
+                      initial={{ strokeDashoffset: 2 * Math.PI * 50 }}
+                      animate={{ strokeDashoffset: 2 * Math.PI * 50 - (result.probability / 100) * 2 * Math.PI * 50 }}
+                      transition={{ duration: 1, ease: "easeOut" }}
+                      transform="rotate(-90 60 60)"
+                      style={{ filter: `drop-shadow(0 0 6px ${getRiskColor(result.riskLevel)})` }}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <motion.span className="text-2xl font-bold" style={{ color: getRiskColor(result.riskLevel) }}
+                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
+                      {result.probability}%
+                    </motion.span>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-muted-foreground mb-1">{t.scamProbability}</p>
+                  <p className="text-xl font-bold" style={{ color: getRiskColor(result.riskLevel) }}>
+                    {getRiskLabel(result.riskLevel)}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">{t.riskLevelLabel}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Indicators */}
+            <div className="glass rounded-xl p-5">
+              <p className="text-xs uppercase tracking-widest text-muted-foreground mb-3">{t.detectedIndicators}</p>
+              {result.indicators.length > 0 ? (
+                <div className="space-y-2">
+                  {result.indicators.map((ind, i) => (
+                    <motion.div key={ind} className="flex items-center gap-3 text-sm"
+                      initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}>
+                      <XCircle className="w-4 h-4 flex-shrink-0" style={{ color: getRiskColor(result.riskLevel) }} />
+                      <span className="text-foreground">{getIndicatorLabel(ind)}</span>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-sm">
+                  <CheckCircle className="w-4 h-4 text-success" />
+                  <span className="text-muted-foreground">{t.noIndicators}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Risk Breakdown */}
+            {result.breakdown.length > 0 && (
+              <div className="glass rounded-xl p-5">
+                <p className="text-xs uppercase tracking-widest text-muted-foreground mb-3">{t.riskBreakdown}</p>
+                <div className="space-y-3">
+                  {result.breakdown.map((item, i) => (
+                    <motion.div key={item.label} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.1 }}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-muted-foreground">{getIndicatorLabel(item.label)}</span>
+                        <span className="text-foreground font-medium">{item.score}%</span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-secondary">
+                        <motion.div className="h-full rounded-full" style={{ backgroundColor: getRiskColor(result.riskLevel) }}
+                          initial={{ width: 0 }} animate={{ width: `${item.score}%` }} transition={{ duration: 0.6, delay: i * 0.1 }} />
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Recommendation */}
+            <div className="glass rounded-xl p-5">
+              <p className="text-xs uppercase tracking-widest text-muted-foreground mb-2">{t.recommendation}</p>
+              <p className="text-sm text-foreground leading-relaxed">{(t as any)[result.recommendation]}</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {!result && !isAnalyzing && (
+        <div>
+          <p className="text-xs text-muted-foreground mb-3 uppercase tracking-widest">{t.trySampleMessages}</p>
+          <div className="space-y-2">
+            {sampleMessages.map((msg, i) => (
+              <button key={i} onClick={() => setInputText(msg)}
+                className="w-full text-left glass rounded-lg p-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                {msg}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
