@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Link, useNavigate } from "react-router-dom";
-import { Shield, MessageSquareWarning, Eye, Activity, ArrowLeft, Brain, Fingerprint, Users, AlertTriangle, CheckCircle, XCircle, Keyboard, Mouse, Clock, Smartphone, Sparkles, LogOut } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Shield, MessageSquareWarning, Eye, Activity, ArrowLeft, Brain, Fingerprint, Users, AlertTriangle, CheckCircle, XCircle, Keyboard, Mouse, Clock, Smartphone, Sparkles } from "lucide-react";
 import SecureCircleVisual from "@/components/SecureCircleVisual";
 import LanguageSelector from "@/components/LanguageSelector";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -14,13 +14,7 @@ type Tab = "scam" | "deepfake" | "biometrics" | "securecircle";
 
 const Dashboard = () => {
   const { t } = useLanguage();
-  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>("scam");
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate("/auth");
-  };
 
   const tabs: { id: Tab; label: string; icon: typeof Shield; desc: string }[] = [
     { id: "scam", label: t.scamDetector, icon: MessageSquareWarning, desc: t.scamDetectorDesc },
@@ -48,9 +42,6 @@ const Dashboard = () => {
               <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
               <span className="text-xs text-muted-foreground">{t.systemActive}</span>
             </div>
-            <button onClick={handleSignOut} className="text-muted-foreground hover:text-foreground transition-colors p-1" title="Sign out">
-              <LogOut className="w-4 h-4" />
-            </button>
           </div>
         </div>
       </header>
@@ -79,8 +70,6 @@ const Dashboard = () => {
     </div>
   );
 };
-
-// Inline simplified tabs to avoid complex component imports with Supabase deps
 
 const ScamTab = () => {
   const { t, language } = useLanguage();
@@ -205,7 +194,7 @@ const ScamTab = () => {
               <p className="text-xs uppercase tracking-widest text-muted-foreground mb-3">{t.detectedIndicators}</p>
               {result.indicators.length > 0 ? (
                 <div className="space-y-2">
-                  {result.indicators.map((ind, i) => (
+                  {result.indicators.map((ind: string, i: number) => (
                     <motion.div key={ind} className="flex items-center gap-3 text-sm"
                       initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}>
                       <XCircle className="w-4 h-4 flex-shrink-0" style={{ color: getRiskColor(result.riskLevel) }} />
@@ -226,7 +215,7 @@ const ScamTab = () => {
               <div className="glass rounded-xl p-5">
                 <p className="text-xs uppercase tracking-widest text-muted-foreground mb-3">{t.riskBreakdown}</p>
                 <div className="space-y-3">
-                  {result.breakdown.map((item, i) => (
+                  {result.breakdown.map((item: any, i: number) => (
                     <motion.div key={item.label} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.1 }}>
                       <div className="flex justify-between text-sm mb-1">
                         <span className="text-muted-foreground">{getIndicatorLabel(item.label)}</span>
@@ -374,13 +363,12 @@ const SecureCircleTab = () => {
         </div>
         <div className="glass rounded-xl p-5">
           <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-            <Brain className="w-4 h-4 text-primary" /> {t.keyFeatures}
+            <Shield className="w-4 h-4 text-primary" /> {(t as any).privacyGuarantee}
           </h4>
           <ul className="space-y-2 text-sm text-muted-foreground">
-            <li className="flex items-center gap-2"><Fingerprint className="w-3 h-3 text-primary" /> {t.offlineBluetooth}</li>
-            <li className="flex items-center gap-2"><Fingerprint className="w-3 h-3 text-primary" /> {t.smsFallback}</li>
-            <li className="flex items-center gap-2"><Fingerprint className="w-3 h-3 text-primary" /> {t.autoFreezeDetection}</li>
-            <li className="flex items-center gap-2"><Fingerprint className="w-3 h-3 text-primary" /> {t.timeBoxed}</li>
+            <li className="flex gap-2"><CheckCircle className="w-4 h-4 text-success flex-shrink-0 mt-0.5" /> {(t as any).privacy1}</li>
+            <li className="flex gap-2"><CheckCircle className="w-4 h-4 text-success flex-shrink-0 mt-0.5" /> {(t as any).privacy2}</li>
+            <li className="flex gap-2"><CheckCircle className="w-4 h-4 text-success flex-shrink-0 mt-0.5" /> {(t as any).privacy3}</li>
           </ul>
         </div>
       </div>
