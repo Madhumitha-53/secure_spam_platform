@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Link } from "react-router-dom";
-import { Shield, MessageSquareWarning, Eye, Activity, ArrowLeft, Brain, Fingerprint, Users, AlertTriangle, CheckCircle, XCircle, Keyboard, Mouse, Clock, Smartphone, Sparkles } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Shield, MessageSquareWarning, Eye, Activity, ArrowLeft, Brain, Fingerprint, Users, AlertTriangle, CheckCircle, XCircle, Keyboard, Mouse, Clock, Smartphone, Sparkles, LogOut } from "lucide-react";
 import SecureCircleVisual from "@/components/SecureCircleVisual";
 import LanguageSelector from "@/components/LanguageSelector";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -14,7 +14,13 @@ type Tab = "scam" | "deepfake" | "biometrics" | "securecircle";
 
 const Dashboard = () => {
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>("scam");
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth");
+  };
 
   const tabs: { id: Tab; label: string; icon: typeof Shield; desc: string }[] = [
     { id: "scam", label: t.scamDetector, icon: MessageSquareWarning, desc: t.scamDetectorDesc },
@@ -42,6 +48,9 @@ const Dashboard = () => {
               <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
               <span className="text-xs text-muted-foreground">{t.systemActive}</span>
             </div>
+            <button onClick={handleSignOut} className="text-muted-foreground hover:text-foreground transition-colors p-1" title="Sign out">
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </header>
