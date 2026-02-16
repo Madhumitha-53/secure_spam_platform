@@ -21,9 +21,35 @@ serve(async (req) => {
       );
     }
 
+    if (message.length > 2000) {
+      return new Response(
+        JSON.stringify({ error: "Message too long (max 2000 characters)" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (message.length < 5) {
+      return new Response(
+        JSON.stringify({ error: "Message too short (min 5 characters)" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const validLanguages = ["en", "hi", "ta", "te", "kn", "bn", "mr", "gu", "pa", "or", "as"];
+    if (language && !validLanguages.includes(language)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid language" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+      console.error("LOVABLE_API_KEY is not configured");
+      return new Response(
+        JSON.stringify({ error: "Service configuration error. Please try again later." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const systemPrompt = `You are an expert fraud and scam detection AI for Indian Overseas Bank (IOB). Your job is to analyze messages (SMS, WhatsApp, call transcripts) and determine if they are scams.
@@ -93,20 +119,20 @@ The aiExplanation should be 1-2 sentences explaining WHY in the user's language.
     if (!response.ok) {
       if (response.status === 429) {
         return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
+          JSON.stringify({ error: "Service temporarily busy. Please try again later." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add funds." }),
+          JSON.stringify({ error: "Service temporarily unavailable." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       const errText = await response.text();
       console.error("AI gateway error:", response.status, errText);
       return new Response(
-        JSON.stringify({ error: "AI analysis failed" }),
+        JSON.stringify({ error: "Failed to analyze message. Please try again." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -141,7 +167,7 @@ The aiExplanation should be 1-2 sentences explaining WHY in the user's language.
   } catch (e) {
     console.error("analyze-scam error:", e);
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      JSON.stringify({ error: "Failed to analyze message. Please try again." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
