@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
-import { Shield, MessageSquareWarning, Eye, Activity, ArrowLeft, Brain, Fingerprint, Users, AlertTriangle, CheckCircle, XCircle, Keyboard, Mouse, Clock, Smartphone, Sparkles } from "lucide-react";
+import { Shield, MessageSquareWarning, Eye, Activity, ArrowLeft, Users, CheckCircle, XCircle, Sparkles } from "lucide-react";
+import DeepfakeTab from "@/components/dashboard/DeepfakeTab";
+import BiometricsTab from "@/components/dashboard/BiometricsTab";
 import SecureCircleVisual from "@/components/SecureCircleVisual";
 import LanguageSelector from "@/components/LanguageSelector";
 import { useLanguage } from "@/i18n/LanguageContext";
-import TrustScoreRing from "@/components/TrustScoreRing";
-import useBehavioralBiometrics from "@/hooks/useBehavioralBiometrics";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -65,6 +65,7 @@ const Dashboard = () => {
           {activeTab === "deepfake" && <DeepfakeTab />}
           {activeTab === "biometrics" && <BiometricsTab />}
           {activeTab === "securecircle" && <SecureCircleTab />}
+
         </motion.div>
       </div>
     </div>
@@ -268,77 +269,8 @@ const ScamTab = () => {
   );
 };
 
-const DeepfakeTab = () => {
-  const { t } = useLanguage();
-  return (
-    <div className="space-y-6">
-      <div className="glass rounded-xl p-8 text-center cursor-pointer hover:border-primary/50 transition-all">
-        <div className="w-16 h-16 rounded-full glass flex items-center justify-center mx-auto mb-3">
-          <Eye className="w-8 h-8 text-primary" />
-        </div>
-        <p className="text-foreground font-semibold">{t.dropImage}</p>
-        <p className="text-xs text-muted-foreground mt-1">{t.supportsFormats}</p>
-      </div>
-    </div>
-  );
-};
 
-const BiometricsTab = () => {
-  const { t } = useLanguage();
-  const { biometrics, recordKeystroke, recordMouseMove, recordScroll, getBehaviorScore } = useBehavioralBiometrics();
-  const [score, setScore] = useState(0);
 
-  useEffect(() => {
-    const handleKey = () => recordKeystroke();
-    const handleMouse = () => recordMouseMove();
-    const handleScrollEvt = () => recordScroll();
-    window.addEventListener("keydown", handleKey);
-    window.addEventListener("mousemove", handleMouse);
-    window.addEventListener("scroll", handleScrollEvt);
-    return () => { window.removeEventListener("keydown", handleKey); window.removeEventListener("mousemove", handleMouse); window.removeEventListener("scroll", handleScrollEvt); };
-  }, [recordKeystroke, recordMouseMove, recordScroll]);
-
-  useEffect(() => {
-    const interval = setInterval(() => setScore(getBehaviorScore()), 1000);
-    return () => clearInterval(interval);
-  }, [getBehaviorScore]);
-
-  const metrics = [
-    { icon: Keyboard, label: t.typingSpeed, value: `${biometrics.typingSpeed} ${t.wpm}`, sub: `${biometrics.typingConsistency}% ${t.consistent}` },
-    { icon: Mouse, label: t.mouseActivity, value: `${biometrics.mouseMovements}`, sub: t.movementsTracked },
-    { icon: Clock, label: t.sessionDuration, value: `${biometrics.sessionDuration}s`, sub: t.activeSession },
-    { icon: Smartphone, label: t.deviceTrustLabel, value: `${biometrics.deviceTrust}%`, sub: t.fingerprintMatch },
-    { icon: Activity, label: t.scrollPatterns, value: `${biometrics.scrollPatterns}`, sub: t.scrollEvents },
-  ];
-
-  return (
-    <div className="space-y-6">
-      <div className="glass rounded-xl p-6 flex flex-col items-center">
-        <p className="text-xs uppercase tracking-widest text-muted-foreground mb-4">{t.liveBehavioralScore}</p>
-        <TrustScoreRing score={score} />
-        <p className="text-sm text-muted-foreground mt-4">{t.interactToSee}</p>
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {metrics.map(({ icon: Icon, label, value, sub }, i) => (
-          <motion.div key={label} className="glass rounded-xl p-4"
-            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
-            <div className="flex items-center gap-2 mb-2">
-              <Icon className="w-4 h-4 text-primary" />
-              <span className="text-xs text-muted-foreground">{label}</span>
-            </div>
-            <p className="text-2xl font-bold text-foreground">{value}</p>
-            <p className="text-xs text-muted-foreground">{sub}</p>
-          </motion.div>
-        ))}
-      </div>
-      <div className="glass rounded-xl p-4">
-        <p className="text-xs text-muted-foreground mb-2 uppercase tracking-widest">{t.tryTyping}</p>
-        <textarea placeholder={t.typeAnything} onKeyDown={recordKeystroke}
-          className="w-full bg-transparent text-foreground placeholder:text-muted-foreground/50 resize-none h-20 outline-none text-sm" />
-      </div>
-    </div>
-  );
-};
 
 const SecureCircleTab = () => {
   const { t } = useLanguage();
