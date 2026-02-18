@@ -2,3 +2,9 @@ project_id = "lhjgdavbrjvlkitkvhmv"
 
 [functions.analyze-scam]
 verify_jwt = false
+
+[functions.analyze-deepfake]
+verify_jwt = false
+
+[functions.analyze-biometrics]
+verify_jwt = false
