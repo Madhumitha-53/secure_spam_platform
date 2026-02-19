@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Eye, Camera, Upload, XCircle, CheckCircle, Sparkles, Video, ImageIcon } from "lucide-react";
+import { Eye, Camera, Upload, XCircle, CheckCircle, Sparkles, Video, ImageIcon, RefreshCw } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -12,10 +12,15 @@ const DeepfakeTab = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [mode, setMode] = useState<"upload" | "webcam">("upload");
   const [webcamActive, setWebcamActive] = useState(false);
+  const [autoAnalyze, setAutoAnalyze] = useState(true);
+  const [scanCount, setScanCount] = useState(0);
+  const [liveResult, setLiveResult] = useState<any | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const autoIntervalRef = useRef<number>(0);
+  const analyzingRef = useRef(false);
 
   const startWebcam = useCallback(async () => {
     try {
@@ -27,15 +32,72 @@ const DeepfakeTab = () => {
         videoRef.current.srcObject = stream;
       }
       setWebcamActive(true);
+      setLiveResult(null);
+      setScanCount(0);
     } catch (err) {
       toast.error("Camera access denied. Please allow camera permissions.");
     }
   }, []);
 
   const stopWebcam = useCallback(() => {
+    clearInterval(autoIntervalRef.current);
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     setWebcamActive(false);
+  }, []);
+
+  // Live webcam analysis (no capture needed)
+  const analyzeLiveFrame = useCallback(async () => {
+    if (!videoRef.current || !canvasRef.current || analyzingRef.current) return;
+    const video = videoRef.current;
+    if (video.videoWidth === 0) return;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0);
+    const data = canvas.toDataURL("image/jpeg", 0.6);
+
+    analyzingRef.current = true;
+    setIsAnalyzing(true);
+    try {
+      const { data: res, error } = await supabase.functions.invoke("analyze-deepfake", {
+        body: { image: data, language },
+      });
+      if (!error && !res?.error) {
+        setLiveResult(res);
+        setScanCount((c) => c + 1);
+      }
+    } catch { /* silent for auto */ }
+    finally {
+      analyzingRef.current = false;
+      setIsAnalyzing(false);
+    }
+  }, [language]);
+
+  // Auto-analyze every 6 seconds while webcam is active
+  useEffect(() => {
+    if (webcamActive && mode === "webcam" && autoAnalyze) {
+      const timeout = setTimeout(() => analyzeLiveFrame(), 2000);
+      autoIntervalRef.current = window.setInterval(() => {
+        analyzeLiveFrame();
+      }, 6000);
+      return () => {
+        clearTimeout(timeout);
+        clearInterval(autoIntervalRef.current);
+      };
+    } else {
+      clearInterval(autoIntervalRef.current);
+    }
+  }, [webcamActive, mode, autoAnalyze, analyzeLiveFrame]);
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      clearInterval(autoIntervalRef.current);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
   }, []);
 
   const captureFrame = useCallback(() => {
@@ -102,17 +164,20 @@ const DeepfakeTab = () => {
     }
   };
 
+  // Show live webcam mode with real-time overlay
+  const showLiveWebcam = mode === "webcam" && webcamActive && !imageData;
+
   return (
     <div className="space-y-6">
       {/* Mode Toggle */}
       <div className="flex gap-2">
-        <button onClick={() => { setMode("upload"); stopWebcam(); }}
+        <button onClick={() => { setMode("upload"); stopWebcam(); setImageData(null); setResult(null); }}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === "upload" ? "gradient-primary text-primary-foreground" : "glass text-muted-foreground hover:text-foreground"}`}>
           <Upload className="w-4 h-4" /> {t.dropImage}
         </button>
         <button onClick={() => { setMode("webcam"); setImageData(null); setResult(null); }}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === "webcam" ? "gradient-primary text-primary-foreground" : "glass text-muted-foreground hover:text-foreground"}`}>
-          <Camera className="w-4 h-4" /> Webcam Capture
+          <Camera className="w-4 h-4" /> Live Webcam
         </button>
       </div>
 
@@ -129,12 +194,52 @@ const DeepfakeTab = () => {
         </div>
       )}
 
-      {/* Webcam Mode */}
+      {/* Live Webcam Mode */}
       {mode === "webcam" && !imageData && (
         <div className="glass rounded-xl p-4 space-y-4">
           <div className="relative rounded-lg overflow-hidden bg-black/50 aspect-video flex items-center justify-center">
             {webcamActive ? (
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+              <>
+                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                {/* Live overlay badge */}
+                <div className="absolute top-2 left-2 flex items-center gap-1 glass rounded-full px-2 py-1">
+                  <div className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
+                  <span className="text-[10px] text-foreground font-bold">LIVE DEEPFAKE SCAN</span>
+                </div>
+                {/* Auto toggle */}
+                <div className="absolute top-2 right-2">
+                  <button onClick={() => setAutoAnalyze(!autoAnalyze)}
+                    className={`text-[10px] px-2 py-1 rounded-full transition-all flex items-center gap-1 ${autoAnalyze ? "bg-primary/30 text-primary backdrop-blur-md" : "bg-muted/50 text-muted-foreground backdrop-blur-md"}`}>
+                    {isAnalyzing && <RefreshCw className="w-3 h-3 animate-spin" />}
+                    {autoAnalyze ? "AUTO ON" : "AUTO OFF"}
+                  </button>
+                </div>
+                {/* Live result overlay */}
+                {liveResult && (
+                  <div className={`absolute bottom-2 left-2 right-2 rounded-lg px-3 py-2 backdrop-blur-md ${!liveResult.isDeepfake ? "bg-success/20 border border-success/40" : "bg-destructive/20 border border-destructive/40"}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {!liveResult.isDeepfake ? <CheckCircle className="w-4 h-4 text-success" /> : <XCircle className="w-4 h-4 text-destructive" />}
+                        <span className="text-xs font-bold text-foreground">
+                          {liveResult.isDeepfake ? "DEEPFAKE ⚠" : "AUTHENTIC ✓"} • {liveResult.authenticity}%
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-foreground/70">
+                        Scan #{scanCount} • {liveResult.riskLevel}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {/* Scanning indicator */}
+                {isAnalyzing && !liveResult && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+                    <div className="text-center">
+                      <RefreshCw className="w-8 h-8 text-primary animate-spin mx-auto mb-1" />
+                      <span className="text-xs text-foreground">Scanning for deepfakes...</span>
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="text-center">
                 <Video className="w-12 h-12 text-muted-foreground mx-auto mb-2" />
@@ -145,19 +250,47 @@ const DeepfakeTab = () => {
           <div className="flex gap-2 justify-center">
             {!webcamActive ? (
               <button onClick={startWebcam} className="gradient-primary text-primary-foreground px-6 py-2 rounded-lg text-sm font-semibold">
-                Start Camera
+                ▶ Start Live Detection
               </button>
             ) : (
               <>
-                <button onClick={captureFrame} className="gradient-primary text-primary-foreground px-6 py-2 rounded-lg text-sm font-semibold">
+                <button onClick={analyzeLiveFrame} disabled={isAnalyzing}
+                  className="gradient-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
+                  {isAnalyzing ? "Scanning..." : "🔍 Scan Now"}
+                </button>
+                <button onClick={captureFrame} className="glass text-foreground px-4 py-2 rounded-lg text-sm">
                   📸 Capture
                 </button>
                 <button onClick={stopWebcam} className="glass text-muted-foreground px-4 py-2 rounded-lg text-sm">
-                  Cancel
+                  Stop
                 </button>
               </>
             )}
           </div>
+
+          {/* Live analysis detail cards */}
+          {liveResult && webcamActive && (
+            <motion.div className="space-y-3" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+              {liveResult.indicators?.length > 0 && (
+                <div className="glass rounded-lg p-3">
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Indicators</p>
+                  <div className="space-y-1">
+                    {liveResult.indicators.map((ind: any, i: number) => (
+                      <div key={i} className="flex items-center gap-2 text-xs">
+                        {ind.detected ? <XCircle className="w-3 h-3 text-destructive" /> : <CheckCircle className="w-3 h-3 text-success" />}
+                        <span className="text-muted-foreground">{ind.name}: {ind.detail}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {liveResult.explanation && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-primary" /> {liveResult.explanation}
+                </p>
+              )}
+            </motion.div>
+          )}
         </div>
       )}
 
@@ -182,7 +315,7 @@ const DeepfakeTab = () => {
 
       {/* Loading */}
       <AnimatePresence>
-        {isAnalyzing && (
+        {isAnalyzing && imageData && (
           <motion.div className="glass rounded-xl p-8 flex flex-col items-center"
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             <div className="w-12 h-12 rounded-full gradient-primary flex items-center justify-center animate-pulse mb-3">
@@ -192,10 +325,9 @@ const DeepfakeTab = () => {
           </motion.div>
         )}
 
-        {/* Results */}
+        {/* Results for uploaded/captured images */}
         {result && !isAnalyzing && (
           <motion.div className="space-y-4" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            {/* Authenticity Score */}
             <div className="glass rounded-xl p-6">
               <p className="text-xs uppercase tracking-widest text-muted-foreground mb-4">{t.authenticityCheck}</p>
               <div className="flex items-center gap-6">
@@ -229,7 +361,6 @@ const DeepfakeTab = () => {
               </div>
             </div>
 
-            {/* Indicators */}
             {result.indicators?.length > 0 && (
               <div className="glass rounded-xl p-5">
                 <p className="text-xs uppercase tracking-widest text-muted-foreground mb-3">{t.detectedIssues}</p>
@@ -252,7 +383,6 @@ const DeepfakeTab = () => {
               </div>
             )}
 
-            {/* Breakdown */}
             {result.breakdown?.length > 0 && (
               <div className="glass rounded-xl p-5">
                 <p className="text-xs uppercase tracking-widest text-muted-foreground mb-3">{t.analysisBreakdown}</p>
@@ -273,7 +403,6 @@ const DeepfakeTab = () => {
               </div>
             )}
 
-            {/* AI Explanation */}
             {result.explanation && (
               <div className="glass rounded-xl p-5 border border-primary/20">
                 <p className="text-xs uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-2">
