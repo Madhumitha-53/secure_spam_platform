@@ -200,7 +200,7 @@ const DeepfakeTab = () => {
           <div className="relative rounded-lg overflow-hidden bg-black/50 aspect-video flex items-center justify-center">
             {webcamActive ? (
               <>
-                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" style={{ transform: "scaleX(-1)" }} />
                 {/* Live overlay badge */}
                 <div className="absolute top-2 left-2 flex items-center gap-1 glass rounded-full px-2 py-1">
                   <div className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
